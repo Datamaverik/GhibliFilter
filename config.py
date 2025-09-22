@@ -3,8 +3,8 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-TRAIN_DIR = "data/train"
-VAL_DIR = "data/val"
+TRAIN_DIR = "/kaggle/input/real-to-ghibli-image-dataset-5k-paired-images/dataset"
+VAL_DIR = "/kaggle/input/real-to-ghibli-image-dataset-5k-paired-images/dataset"  # Update if you have a separate val set
 BATCH_SIZE = 1
 LEARNING_RATE = 2e-4
 LAMBDA_IDENTITY = 0.0

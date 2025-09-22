@@ -4,13 +4,13 @@ from torch.utils.data import Dataset
 import numpy as np
 
 class RealGhibliDataset(Dataset):
-    def __init__(self, root_ghibli, root_real, transform=None):
-        self.root_ghibli = root_ghibli
-        self.root_real = root_real
+    def __init__(self, root_dir, transform=None):
+        self.root_ghibli = os.path.join(root_dir, "trainB_ghibli")
+        self.root_real = os.path.join(root_dir, "trainA")
         self.transform = transform
         
-        self.ghilbi_images = os.listdir(root_ghibli)
-        self.real_images = os.listdir(root_real)
+        self.ghilbi_images = os.listdir(self.root_ghibli)
+        self.real_images = os.listdir(self.root_real)
         self.length_dataset = max(len(self.ghilbi_images), len(self.real_images))
         self.ghilbi_len = len(self.ghilbi_images)
         self.real_len = len(self.real_images)
