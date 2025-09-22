@@ -115,7 +115,8 @@ def main():
         )
 
     dataset = RealGhibliDataset(
-        root_real=config.TRAIN_DIR + "/real", root_ghibli=config.TRAIN_DIR + "/ghibli", transform=config.transforms,
+        root_dir=config.TRAIN_DIR,
+        transform=config.transforms,
     )
 
     loader = DataLoader(

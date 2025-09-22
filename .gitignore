@@ -2,3 +2,7 @@
 data/
 # Ignore all checkpoint files
 *.pth.tar
+
+
+kaggle/
+venv/
