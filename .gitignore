@@ -5,4 +5,5 @@ data/
 
 
 kaggle/
-venv/
+.venv/
+trained_models

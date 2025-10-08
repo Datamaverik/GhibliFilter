@@ -1,46 +1,50 @@
-from PIL import Image
+import tensorflow_datasets as tfds
+from tensorflow_examples.models.pix2pix import pix2pix
+from utils import preprocess_image_test, preprocess_image_train
+from config import BUFFER_SIZE, BATCH_SIZE
+
 import os
-from torch.utils.data import Dataset
-import numpy as np
+import time
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
 
-class RealGhibliDataset(Dataset):
-    def __init__(self, root_dir, transform=None):
-        self.root_ghibli = os.path.join(root_dir, "trainB_ghibli")
-        self.root_real = os.path.join(root_dir, "trainA")
-        self.transform = transform
-        
-        self.ghilbi_images = os.listdir(self.root_ghibli)
-        self.real_images = os.listdir(self.root_real)
-        self.length_dataset = max(len(self.ghilbi_images), len(self.real_images))
-        self.ghilbi_len = len(self.ghilbi_images)
-        self.real_len = len(self.real_images)
-    
-    def __len__(self):
-        return self.length_dataset
-    
-    def __getitem__(self, index):
-        ghilbi_img_name = self.ghilbi_images[index % self.ghilbi_len]
-        real_img_name = self.real_images[index % self.real_len]
+AUTOTUNE = tf.data.AUTOTUNE
 
-        ghilbi_path = os.path.join(self.root_ghibli, ghilbi_img_name)
-        real_path = os.path.join(self.root_real, real_img_name)
+import tensorflow as tf
+import os
 
-        ghilbi_img = Image.open(ghilbi_path).convert("RGB")
-        real_img = Image.open(real_path).convert("RGB")
+trainA_dir = "/home/data-dynamo/AI_ML/Ghilbi/kaggle/input/real-to-ghibli-image-dataset-5k-paired-images/dataset/trainA"
+trainB_dir = "/home/data-dynamo/AI_ML/Ghilbi/kaggle/input/real-to-ghibli-image-dataset-5k-paired-images/dataset/trainB_ghibli"
 
-        # Ensure both images are the same size before transform
-        target_size = (256, 256)  # Should match config.py transforms
-        ghilbi_img = ghilbi_img.resize(target_size, Image.BICUBIC)
-        real_img = real_img.resize(target_size, Image.BICUBIC)
+trainA_files = [os.path.join(trainA_dir, f) for f in os.listdir(trainA_dir) if f.endswith(('.jpg','.png','.jpeg'))]
+trainB_files = [os.path.join(trainB_dir, f) for f in os.listdir(trainB_dir) if f.endswith(('.jpg','.png','.jpeg'))]
 
-        ghilbi_img = np.array(ghilbi_img)
-        real_img = np.array(real_img)
+def load_image(path):
+    img = tf.io.read_file(path)
+    img = tf.image.decode_jpeg(img, channels=3)
+    img = tf.image.resize(img, [256, 256])
+    return img 
 
-        if self.transform:
-            augumentations = self.transform(image=ghilbi_img, image0=real_img)
-            ghilbi_img = augumentations["image"]
-            real_img = augumentations["image0"]
 
-        return ghilbi_img, real_img
-        
-        
+train_real = tf.data.Dataset.from_tensor_slices(trainA_files).map(load_image, num_parallel_calls=tf.data.AUTOTUNE).batch(1)
+train_ghibli = tf.data.Dataset.from_tensor_slices(trainB_files).map(load_image, num_parallel_calls=tf.data.AUTOTUNE).batch(1)
+
+
+train_real = train_real.cache().map(
+    preprocess_image_train, num_parallel_calls=tf.data.AUTOTUNE
+).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+train_ghibli = train_ghibli.cache().map(
+    preprocess_image_train, num_parallel_calls=tf.data.AUTOTUNE
+).shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+test_real = train_real.map(
+    preprocess_image_test, num_parallel_calls=tf.data.AUTOTUNE
+).cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+test_ghibli = train_ghibli.map(
+    preprocess_image_test, num_parallel_calls=tf.data.AUTOTUNE
+).cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
+
+sample_real = next(iter(train_real))
+sample_ghibli = next(iter(train_ghibli))

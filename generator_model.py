@@ -1,71 +1,24 @@
-import torch
-import torch.nn as nn
+import tensorflow as tf
+import tensorflow_datasets as tfds
+from tensorflow_examples.models.pix2pix import pix2pix
+from config import OUTPUT_CHANNELS
+from utils import loss_obj
+from config import LAMBDA
 
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, down=True, use_act=True, **kwargs):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, padding_mode="reflect", **kwargs)
-            if down
-            else nn.ConvTranspose2d(in_channels, out_channels, **kwargs),
-            nn.ReLU(inplace=True) if use_act else nn.Identity()
-        )
-    
-    def forward(self, x):
-        return self.conv(x)
-    
-class ResidualBlock(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.block = nn.Sequential(
-            ConvBlock(channels, channels, kernel_size=3, padding=1),
-            ConvBlock(channels, channels, use_act=False, kernel_size=3, padding=1),
-        )
-    
-    def forward(self, x):
-        return x + self.block(x)
+generator_g = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
+generator_f = pix2pix.unet_generator(OUTPUT_CHANNELS, norm_type='instancenorm')
 
-class Generator(nn.Module):
-    def __init__(self, img_channels, num_features=64, num_residuals=9):
-        super().__init__()
-        self.initial = nn.Sequential(
-            nn.Conv2d(img_channels,64,kernel_size=7,stride=1,padding=3,padding_mode="reflect"),
-            nn.ReLU(inplace=True),
-        )
-        self.down_blocks = nn.ModuleList(
-            [
-                ConvBlock(num_features, num_features*2, kernel_size=3, stride=2, padding=1),
-                ConvBlock(num_features*2, num_features*4, kernel_size=3, stride=2, padding=1),
-            ]
-        )
-        
-        self.residual_blocks = nn.Sequential(
-            *[ResidualBlock(num_features*4) for _ in range(num_residuals)]
-        )
-        self.up_blocks = nn.ModuleList(
-            [
-                ConvBlock(num_features*4, num_features*2, down=False, kernel_size=3, stride=2, padding=1, output_padding=1),
-                ConvBlock(num_features*2, num_features*1, down=False, kernel_size=3, stride=2, padding=1, output_padding=1),
-            ]
-        )
-        
-        self.last = nn.Conv2d(num_features*1, img_channels, kernel_size=7, stride=1, padding=3, padding_mode="reflect")
-    
-    def forward(self, x):
-        x = self.initial(x)
-        for layer in self.down_blocks:
-            x = layer(x)
-        x = self.residual_blocks(x)
-        for layer in self.up_blocks:
-            x = layer(x)
-        return torch.tanh(self.last(x))
+def generator_loss(generated):
+  return loss_obj(tf.ones_like(generated), generated)
 
-def test():
-    img_channels = 3
-    img_size = 256
-    x = torch.randn((2, img_channels, img_size, img_size))
-    gen = Generator(img_channels, 64, 9)
-    print(gen(x).shape)
-    
-if __name__ == "__main__":
-    test()
+def calc_cycle_loss(real_image, cycled_image):
+  loss1 = tf.reduce_mean(tf.abs(real_image - cycled_image))
+  
+  return LAMBDA * loss1
+
+def identity_loss(real_image, same_image):
+  loss = tf.reduce_mean(tf.abs(real_image - same_image))
+  return LAMBDA * 0.5 * loss
+
+generator_g_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+generator_f_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)

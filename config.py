@@ -1,29 +1,12 @@
-import torch
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-TRAIN_DIR = "./kaggle/input/real-to-ghibli-image-dataset-5k-paired-images/dataset"
-VAL_DIR = "./kaggle/input/real-to-ghibli-image-dataset-5k-paired-images/dataset"  # Update if you have a separate val set
+BUFFER_SIZE = 1000
 BATCH_SIZE = 1
-LEARNING_RATE = 2e-4
-LAMBDA_IDENTITY = 0.0
-LAMBDA_CYCLE = 10
-NUM_WORKERS = 4
-NUM_EPOCHS = 200
-LOAD_MODEL = False
-SAVE_MODEL = True
-CHECKPOINT_GEN_R = "genh.pth.tar"
-CHECKPOINT_GEN_G = "genz.pth.tar"
-CHECKPOINT_CRITIC_R = "critich.pth.tar"
-CHECKPOINT_CRITIC_G = "criticz.pth.tar"
+IMG_WIDTH = 256
+IMG_HEIGHT = 256
+OUTPUT_CHANNELS = 3
+LAMBDA = 10
+EPOCHS = 100
+MODEL_PATH = "/home/data-dynamo/AI_ML/Ghilbi/trained_models/generator_g_ghibli.h5"
+CHECKPOINT_PATH = "./checkpoints/train/ckpt-1" 
+IMAGE_PATH = "/home/data-dynamo/AI_ML/Ghilbi/kaggle/input/real-to-ghibli-image-dataset-5k-paired-images/dataset/trainA/world_0002.jpg"
 
-transforms = A.Compose(
-    [
-        A.Resize(width=256, height=256),
-        A.HorizontalFlip(p=0.5),
-        A.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], max_pixel_value=255),
-        ToTensorV2(),
-    ],
-    additional_targets={"image0":"image"},
-)
+checkpoint_path = "/home/data-dynamo/AI_ML/Ghilbi/trained_models/checkpoints"

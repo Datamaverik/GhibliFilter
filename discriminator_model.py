@@ -1,49 +1,20 @@
-import torch
-import torch.nn as nn
-class Block(nn.Module):
-    def __init__(self, in_channels, out_channels, stride):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 4, stride, 1, bias=True, padding_mode="reflect"),
-            nn.InstanceNorm2d(out_channels),
-            nn.LeakyReLU(0.2),
-        )
-    
-    def forward(self, x):
-        return self.conv(x)
-    
-class Discriminator(nn.Module):
-    def __init__(self, in_channels=3, features=[64,128,256,512]):
-        super().__init__()
-        self.initial = nn.Sequential(
-            nn.Conv2d(
-                in_channels,
-                features[0],
-                kernel_size=4,
-                stride=2,
-                padding=1,
-                padding_mode="reflect",
-            ),
-            nn.LeakyReLU(0.2),
-        )
-        
-        layers = []
-        in_channels = features[0]
-        for feature in features[1:]:
-            layers.append(Block(in_channels, feature, stride=1 if feature==features[-1] else 2))
-            in_channels = feature
-        layers.append(nn.Conv2d(in_channels, 1, kernel_size=4, stride=1, padding=1, padding_mode="reflect"))
-        self.model = nn.Sequential(*layers)
-        
-    def forward(self, x):
-        x = self.initial(x)
-        return torch.sigmoid(self.model(x))
-    
-def test():
-    x = torch.randn((5,3,256,256))
-    model = Discriminator(in_channels=3)
-    preds = model(x)
-    print(preds.shape)
-    
-if __name__ == "__main__":
-    test()
+import tensorflow as tf
+import tensorflow_datasets as tfds
+from tensorflow_examples.models.pix2pix import pix2pix
+from config import OUTPUT_CHANNELS
+from utils import loss_obj
+
+discriminator_x = pix2pix.discriminator(norm_type='instancenorm', target=False)
+discriminator_y = pix2pix.discriminator(norm_type='instancenorm', target=False)
+
+def discriminator_loss(real, generated):
+  real_loss = loss_obj(tf.ones_like(real), real)
+
+  generated_loss = loss_obj(tf.zeros_like(generated), generated)
+
+  total_disc_loss = real_loss + generated_loss
+
+  return total_disc_loss * 0.5
+
+discriminator_x_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+discriminator_y_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
