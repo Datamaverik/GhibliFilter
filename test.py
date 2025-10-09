@@ -1,84 +1,87 @@
-import os
+# app_streamlit.py
+import streamlit as st
 import tensorflow as tf
-import matplotlib.pyplot as plt
+import numpy as np
 from tensorflow_examples.models.pix2pix import pix2pix
-from config import MODEL_PATH, IMAGE_PATH, CHECKPOINT_PATH
+from PIL import Image
+import io
+from config import MODEL_PATH, CHECKPOINT_PATH
 
-def preprocess_image_for_model(image_path):
-    img = tf.io.read_file(image_path)
-    img = tf.image.decode_image(img, channels=3)   
-    img.set_shape([None, None, 3])
+st.set_page_config(page_title="Real → Ghibli demo", layout="centered")
+
+@st.cache_resource(show_spinner=False)
+def load_generator():
+    # Try load_model with InstanceNormalization first, else rebuild & restore weights/checkpoint
+    try:
+        InstanceNormalization = pix2pix.InstanceNormalization
+        model = tf.keras.models.load_model(MODEL_PATH, custom_objects={"InstanceNormalization": InstanceNormalization}, compile=False)
+        st.info("Loaded model from .h5")
+        return model
+    except Exception:
+        try:
+            model = pix2pix.unet_generator(3, norm_type='instancenorm')
+            model.load_weights(MODEL_PATH)
+            st.info("Loaded weights into rebuilt generator.")
+            return model
+        except Exception:
+            model = pix2pix.unet_generator(3, norm_type='instancenorm')
+            ckpt = tf.train.Checkpoint(generator_g=model)
+            ckpt.restore(CHECKPOINT_PATH).expect_partial()
+            st.info("Restored generator from checkpoint.")
+            return model
+
+def preprocess_image_file(file_bytes):
+    img = tf.image.decode_image(file_bytes, channels=3)
+    img = tf.image.convert_image_dtype(img, tf.float32)  # converts to [0,1]
+    
+    # --- Step 1: Crop to square ---
+    shape = tf.shape(img)
+    h, w = shape[0], shape[1]
+    crop_size = tf.minimum(h, w)
+    offset_h = (h - crop_size) // 2
+    offset_w = (w - crop_size) // 2
+    img = tf.image.crop_to_bounding_box(img, offset_h, offset_w, crop_size, crop_size)
+
+    # --- Step 2: Resize to 256x256 ---
     img = tf.image.resize(img, [256, 256])
-    img = (tf.cast(img, tf.float32) / 127.5) - 1.0  
+
+    # --- Step 3: Normalize to [-1, 1] ---
+    img = (img * 2.0) - 1.0
+
+    # --- Step 4: Add batch dimension ---
     return tf.expand_dims(img, 0)
 
-def show_results(input_tensor, output_tensor):
-    input_np = (tf.squeeze(input_tensor, 0) + 1.0) / 2.0
-    output_np = (tf.squeeze(output_tensor, 0) + 1.0) / 2.0
 
-    input_np = tf.clip_by_value(input_np, 0.0, 1.0).numpy()
-    output_np = tf.clip_by_value(output_np, 0.0, 1.0).numpy()
+def tensor_to_pil_img(tensor):
+    arr = (tf.squeeze(tensor, 0) + 1.0) / 2.0  # [0,1]
+    arr = tf.clip_by_value(arr, 0.0, 1.0).numpy()
+    arr = (arr * 255).astype('uint8')
+    return Image.fromarray(arr)
 
-    plt.figure(figsize=(8, 4))
-    plt.subplot(1, 2, 1)
-    plt.title("Input")
-    plt.imshow(input_np)
-    plt.axis('off')
-    plt.subplot(1, 2, 2)
-    plt.title("Ghibli-styled Output")
-    plt.imshow(output_np)
-    plt.axis('off')
-    plt.show()
+st.title("Real → Ghibli style (demo)")
+st.write("Drag and drop an image file (jpg/png). Model runs on CPU by default if no GPU.")
 
-if not os.path.exists(IMAGE_PATH):
-    raise FileNotFoundError(f"Test image not found: {IMAGE_PATH}")
+uploaded_file = st.file_uploader("Drop an image here", type=["png","jpg","jpeg"], accept_multiple_files=False)
 
-if not os.path.exists(MODEL_PATH) and not os.path.exists(CHECKPOINT_PATH + ".index"):
-    raise FileNotFoundError(f"Neither .h5 model nor checkpoint found. Check MODEL_PATH or CHECKPOINT_PATH.\n"
-                            f"MODEL_PATH exists: {os.path.exists(MODEL_PATH)}\n"
-                            f"CHECKPOINT .index exists: {os.path.exists(CHECKPOINT_PATH + '.index')}")
+generator = load_generator()
 
-generator = None
-last_error = None
-
-try:
-    InstanceNormalization = pix2pix.InstanceNormalization
-    print("Trying tf.keras.models.load_model with InstanceNormalization from tensorflow_examples...")
-    generator = tf.keras.models.load_model(MODEL_PATH,
-                                          custom_objects={"InstanceNormalization": InstanceNormalization},
-                                          compile=False)
-    print("Loaded model from .h5 using custom_objects.")
-except Exception as e:
-    last_error = e
-    print("load_model with custom_objects failed:", str(e))
-
-if generator is None:
+if uploaded_file is not None:
+    file_bytes = uploaded_file.read()
     try:
-        print("Reconstructing generator architecture with pix2pix.unet_generator and trying load_weights()...")
-        generator = pix2pix.unet_generator(3, norm_type='instancenorm')
-        generator.load_weights(MODEL_PATH)
-        print("Weights loaded into reconstructed generator using load_weights().")
+        input_tensor = preprocess_image_file(file_bytes)
+        pred = generator(input_tensor, training=False)
+
+        # input_pil = Image.open(io.BytesIO(file_bytes)).convert("RGB")
+        # input_pil = input_pil.resize((256,256))
+        input_pil = tensor_to_pil_img(input_tensor)
+
+        output_pil = tensor_to_pil_img(pred)
+
+        col1, col2 = st.columns(2)
+        col1.header("Input")
+        col1.image(input_pil, use_container_width=True)
+        col2.header("Ghibli-styled Output")
+        col2.image(output_pil, use_container_width=True)
+
     except Exception as e:
-        last_error = e
-        generator = None
-        print("Reconstruct + load_weights failed:", str(e))
-
-if generator is None:
-    try:
-        print("Attempting to restore generator from checkpoint:", CHECKPOINT_PATH)
-        generator = pix2pix.unet_generator(3, norm_type='instancenorm')
-        ckpt = tf.train.Checkpoint(generator_g=generator)
-        ckpt.restore(CHECKPOINT_PATH).expect_partial()
-        print("Restored generator from checkpoint.")
-    except Exception as e:
-        last_error = e
-        generator = None
-        print("Checkpoint restore failed:", str(e))
-
-if generator is None:
-    raise RuntimeError("Failed to load generator. Last error:\n" + repr(last_error))
-
-input_img = preprocess_image_for_model(IMAGE_PATH)
-pred = generator(input_img, training=False)
-
-show_results(input_img, pred)
+        st.error(f"Failed to process image: {e}")
