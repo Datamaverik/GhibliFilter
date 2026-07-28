@@ -64,6 +64,10 @@ To resume from a checkpoint, set `LOAD_MODEL = True` in `config.py`.
 - Make sure your images are RGB and of similar size.
 - Training GANs may require many epochs for good results.
 
-## License
+## Architecture
+[block_diag.pdf](https://github.com/user-attachments/files/30478930/block_diag.pdf)
 
-MIT
+### Sample output
+<img width="1606" height="852" alt="Screenshot from 2025-09-23 08-10-56" src="https://github.com/user-attachments/assets/f77e609a-8231-4a28-bfa1-e398113a41e2" />
+
+
